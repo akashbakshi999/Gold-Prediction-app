@@ -1,11 +1,7 @@
 # app.py
-
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
-from prophet import Prophet
 import os
-
 import subprocess
 import sys
 
@@ -16,6 +12,7 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "matplotlib"])
     import matplotlib.pyplot as plt
 
+from prophet import Prophet
 
 # Load data
 def load_data(uploaded_file=None):
