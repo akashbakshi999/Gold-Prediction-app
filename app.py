@@ -25,6 +25,8 @@ def load_data():
         df['price'] = pd.to_numeric(df['price'], errors='coerce')
         # Drop any rows with NaN values that might result from coercion
         df.dropna(subset=['price'], inplace=True)
+        # Sort by date to ensure correct time series order
+        df.sort_index(inplace=True)
         return df
     except FileNotFoundError:
         st.error("Error: Gold_data.csv not found. Please ensure the file is in the same directory.")
@@ -50,11 +52,16 @@ def train_and_forecast(df, forecast_days=30):
     """
     Trains a Linear Regression model and forecasts future gold prices.
     """
-    if df.empty:
+    if df.empty or len(df) < 2: # Need at least 2 data points for lag feature
+        st.warning("Not enough data to train the model and forecast. Please select a larger date range.")
         return pd.DataFrame(), pd.DataFrame(), None
 
     # Create features
     df_features = create_features(df)
+
+    if df_features.empty:
+        st.warning("Not enough data after creating features to train the model. Please select a larger date range.")
+        return pd.DataFrame(), pd.DataFrame(), None
 
     # Define features (X) and target (y)
     X = df_features[['price_lag1']]
@@ -97,51 +104,72 @@ st.markdown("This application forecasts gold prices for the next 30 days using a
 gold_df = load_data()
 
 if not gold_df.empty:
-    st.header("Historical Gold Prices")
-    st.write(gold_df.tail()) # Display last few historical records
+    st.sidebar.header("Date Range Selection")
 
-    # Plot historical data
-    st.subheader("Historical Gold Price Trend")
-    fig_hist, ax_hist = plt.subplots(figsize=(12, 6))
-    ax_hist.plot(gold_df.index, gold_df['price'], label='Historical Price', color='skyblue')
-    ax_hist.set_title('Historical Gold Price Over Time')
-    ax_hist.set_xlabel('Date')
-    ax_hist.set_ylabel('Price')
-    ax_hist.legend()
-    ax_hist.grid(True)
-    st.pyplot(fig_hist)
+    # Get min and max dates from the loaded data
+    min_date = gold_df.index.min().date()
+    max_date = gold_df.index.max().date()
 
-    # Train model and get forecast
-    st.header("30-Day Gold Price Forecast")
-    model, forecast_df = train_and_forecast(gold_df, forecast_days=30)
+    # Allow user to select start and end dates
+    start_date = st.sidebar.date_input("Start Date", value=min_date, min_value=min_date, max_value=max_date)
+    end_date = st.sidebar.date_input("End Date", value=max_date, min_value=min_date, max_value=max_date)
 
-    if not forecast_df.empty:
-        st.subheader("Forecasted Gold Prices (Next 30 Days)")
-        st.write(forecast_df)
-
-        # Combine historical and forecasted data for plotting
-        combined_df = pd.concat([gold_df, forecast_df])
-
-        st.subheader("Historical and Forecasted Gold Prices")
-        fig_combined, ax_combined = plt.subplots(figsize=(12, 6))
-        ax_combined.plot(gold_df.index, gold_df['price'], label='Historical Price', color='skyblue')
-        ax_combined.plot(forecast_df.index, forecast_df['price'], label='Forecasted Price', color='salmon', linestyle='--')
-        ax_combined.set_title('Gold Price: Historical vs. 30-Day Forecast')
-        ax_combined.set_xlabel('Date')
-        ax_combined.set_ylabel('Price')
-        ax_combined.legend()
-        ax_combined.grid(True)
-        st.pyplot(fig_combined)
-
-        st.markdown(
-            """
-            **Note:** This forecast is based on a simple Linear Regression model using the previous day's price.
-            More sophisticated time series models (e.g., ARIMA, Prophet, LSTM) could provide more accurate predictions.
-            This app is for demonstration purposes only and should not be used for financial decisions.
-            """
-        )
+    # Filter data based on selected date range
+    if start_date > end_date:
+        st.sidebar.error("Error: End date must be after start date.")
+        filtered_gold_df = pd.DataFrame() # Empty DataFrame to prevent further processing
     else:
-        st.warning("Could not generate a forecast. Please check the data and model.")
+        filtered_gold_df = gold_df[(gold_df.index.date >= start_date) & (gold_df.index.date <= end_date)]
+
+    if not filtered_gold_df.empty:
+        st.header("Historical Gold Prices (Selected Range)")
+        st.write(filtered_gold_df.tail()) # Display last few historical records from filtered data
+
+        # Plot historical data
+        st.subheader("Historical Gold Price Trend (Selected Range)")
+        fig_hist, ax_hist = plt.subplots(figsize=(12, 6))
+        ax_hist.plot(filtered_gold_df.index, filtered_gold_df['price'], label='Historical Price', color='skyblue')
+        ax_hist.set_title('Historical Gold Price Over Time (Selected Range)')
+        ax_hist.set_xlabel('Date')
+        ax_hist.set_ylabel('Price')
+        ax_hist.legend()
+        ax_hist.grid(True)
+        st.pyplot(fig_hist)
+
+        # Train model and get forecast
+        st.header("30-Day Gold Price Forecast")
+        model, forecast_df = train_and_forecast(filtered_gold_df, forecast_days=30)
+
+        if forecast_df is not None and not forecast_df.empty:
+            st.subheader("Forecasted Gold Prices (Next 30 Days)")
+            st.write(forecast_df)
+
+            # Combine historical and forecasted data for plotting
+            # Use the filtered_gold_df for the historical part of the combined plot
+            combined_df = pd.concat([filtered_gold_df, forecast_df])
+
+            st.subheader("Historical and Forecasted Gold Prices")
+            fig_combined, ax_combined = plt.subplots(figsize=(12, 6))
+            ax_combined.plot(filtered_gold_df.index, filtered_gold_df['price'], label='Historical Price', color='skyblue')
+            ax_combined.plot(forecast_df.index, forecast_df['price'], label='Forecasted Price', color='salmon', linestyle='--')
+            ax_combined.set_title('Gold Price: Historical vs. 30-Day Forecast')
+            ax_combined.set_xlabel('Date')
+            ax_combined.set_ylabel('Price')
+            ax_combined.legend()
+            ax_combined.grid(True)
+            st.pyplot(fig_combined)
+
+            st.markdown(
+                """
+                **Note:** This forecast is based on a simple Linear Regression model using the previous day's price.
+                More sophisticated time series models (e.g., ARIMA, Prophet, LSTM) could provide more accurate predictions.
+                This app is for demonstration purposes only and should not be used for financial decisions.
+                """
+            )
+        else:
+            st.warning("Could not generate a forecast. Please adjust the date range or check the data.")
+    else:
+        st.warning("No data available for the selected date range. Please adjust the dates.")
 else:
     st.error("Unable to process gold price data. Please ensure 'Gold_data.csv' is correctly formatted and available.")
 
