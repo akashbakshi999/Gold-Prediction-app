@@ -6,6 +6,17 @@ import matplotlib.pyplot as plt
 from prophet import Prophet
 import os
 
+import subprocess
+import sys
+
+# Ensure matplotlib is installed
+try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "matplotlib"])
+    import matplotlib.pyplot as plt
+
+
 # Load data
 def load_data(uploaded_file=None):
     if uploaded_file:
