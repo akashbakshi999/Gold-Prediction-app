@@ -25,25 +25,14 @@ def create_features(df):
 st.title("Gold Price Forecast")
 st.write("This app predicts the gold prices for the next 30 days using a trained model.")
 
-# Upload CSV data
-uploaded_file = st.file_uploader("Upload your gold price CSV (with 'date' and 'price' columns):", type=["csv"])
+# Select starting date
+start_date = st.date_input("Select the starting date for prediction:", datetime.date.today())
 
-if uploaded_file:
-    data = pd.read_csv(uploaded_file)
-else:
-    st.stop()
-
-# Preprocess and show original data
-data['date'] = pd.to_datetime(data['date'])
-st.subheader("Historical Gold Prices")
-st.line_chart(data.set_index('date')['price'])
-
-# app.py
+# Load model
 model = load_model('gold_price_model.pkl')
 
 # Prepare next 30 days
-last_date = data['date'].max()
-future_dates = create_future_dates(last_date, 30)
+future_dates = create_future_dates(start_date, 30)
 future_df = pd.DataFrame({'date': future_dates})
 features = create_features(future_df)
 
@@ -61,7 +50,6 @@ st.dataframe(predicted_df.set_index('date'))
 # Plot
 st.subheader("Forecast Plot")
 fig, ax = plt.subplots()
-ax.plot(data['date'], data['price'], label='Historical')
 ax.plot(predicted_df['date'], predicted_df['predicted_price'], label='Forecast', color='orange')
 ax.set_xlabel('Date')
 ax.set_ylabel('Gold Price')
