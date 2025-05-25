@@ -1,61 +1,69 @@
-# app.py
 import streamlit as st
 import pandas as pd
-import os
-import subprocess
-import sys
+import matplotlib.pyplot as plt
+import pickle
+import datetime
 
-# Ensure matplotlib is installed
-try:
-    import matplotlib.pyplot as plt
-except ImportError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "matplotlib"])
-    import matplotlib.pyplot as plt
+# Load pre-trained model
+def load_model(path='gold_price_model.pkl'):
+    with open(path, 'rb') as file:
+        model = pickle.load(file)
+    return model
 
-from prophet import Prophet
+# Prepare future dates for prediction
+def create_future_dates(start_date, days=30):
+    return pd.date_range(start=start_date, periods=days + 1, freq='D')[1:]
 
-# Load data
-def load_data(uploaded_file=None):
-    if uploaded_file:
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_csv('Gold_data.csv')
-    df['date'] = pd.to_datetime(df['date'])
-    df = df.rename(columns={'date': 'ds', 'price': 'y'})
-    return df
-
-# Forecast using Prophet
-def forecast_prices(df, periods=30):
-    model = Prophet()
-    model.fit(df)
-    future = model.make_future_dataframe(periods=periods)
-    forecast = model.predict(future)
-    return forecast, model
+# Generate synthetic features for next 30 days (simple example)
+def create_features(df):
+    df['day'] = df['date'].dt.day
+    df['month'] = df['date'].dt.month
+    df['year'] = df['date'].dt.year
+    return df[['day', 'month', 'year']]
 
 # Streamlit App
 st.title("Gold Price Forecast")
-st.write("This app predicts the gold prices for the next 30 days using historical data.")
+st.write("This app predicts the gold prices for the next 30 days using a trained model.")
 
-# File uploader
-uploaded_file = st.file_uploader("Upload your gold price CSV file (with 'date' and 'price' columns):", type=["csv"])
+# Upload CSV data
+uploaded_file = st.file_uploader("Upload your gold price CSV (with 'date' and 'price' columns):", type=["csv"])
 
-# Load and show data
-data = load_data(uploaded_file)
+if uploaded_file:
+    data = pd.read_csv(uploaded_file)
+else:
+    st.stop()
+
+# Preprocess and show original data
+data['date'] = pd.to_datetime(data['date'])
 st.subheader("Historical Gold Prices")
-st.line_chart(data.set_index('ds')['y'])
+st.line_chart(data.set_index('date')['price'])
 
-# Forecast
-forecast, model = forecast_prices(data)
+# app.py
+model = load_model('gold_price_model.pkl')
+
+# Prepare next 30 days
+last_date = data['date'].max()
+future_dates = create_future_dates(last_date, 30)
+future_df = pd.DataFrame({'date': future_dates})
+features = create_features(future_df)
+
+# Predict
+predictions = model.predict(features)
+
+# Display forecast
 st.subheader("Forecasted Gold Prices for Next 30 Days")
-forecast_tail = forecast[['ds', 'yhat']].tail(30)
-st.dataframe(forecast_tail.set_index('ds'))
+predicted_df = pd.DataFrame({
+    'date': future_dates,
+    'predicted_price': predictions
+})
+st.dataframe(predicted_df.set_index('date'))
 
-# Plot forecast
+# Plot
 st.subheader("Forecast Plot")
-fig1 = model.plot(forecast)
-st.pyplot(fig1)
-
-# Plot forecast components
-st.subheader("Forecast Components")
-fig2 = model.plot_components(forecast)
-st.pyplot(fig2)
+fig, ax = plt.subplots()
+ax.plot(data['date'], data['price'], label='Historical')
+ax.plot(predicted_df['date'], predicted_df['predicted_price'], label='Forecast', color='orange')
+ax.set_xlabel('Date')
+ax.set_ylabel('Gold Price')
+ax.legend()
+st.pyplot(fig)
