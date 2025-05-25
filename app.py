@@ -2,22 +2,52 @@
 
 import streamlit as st
 import pandas as pd
-import pickle
+import matplotlib.pyplot as plt
+from prophet import Prophet
+import os
 
-# Load model
-with open("gold_price_model.pkl", "rb") as f:
-    model = pickle.load(f)
+# Load data
+def load_data(uploaded_file=None):
+    if uploaded_file:
+        df = pd.read_csv(uploaded_file)
+    else:
+        df = pd.read_csv('Gold_data.csv')
+    df['date'] = pd.to_datetime(df['date'])
+    df = df.rename(columns={'date': 'ds', 'price': 'y'})
+    return df
 
-st.set_page_config(page_title="Gold Price Predictor", layout="centered")
-st.title("🏆 Gold Price Prediction App")
+# Forecast using Prophet
+def forecast_prices(df, periods=30):
+    model = Prophet()
+    model.fit(df)
+    future = model.make_future_dataframe(periods=periods)
+    forecast = model.predict(future)
+    return forecast, model
 
-st.write("Enter the previous day's gold price to predict today's price:")
+# Streamlit App
+st.title("Gold Price Forecast")
+st.write("This app predicts the gold prices for the next 30 days using historical data.")
 
-# Input
-price_lag1 = st.number_input("Previous Day's Gold Price", value=1800.0)
+# File uploader
+uploaded_file = st.file_uploader("Upload your gold price CSV file (with 'date' and 'price' columns):", type=["csv"])
 
-# Prediction
-if st.button("Predict Today's Price"):
-    input_df = pd.DataFrame([[price_lag1]], columns=["price_lag1"])
-    prediction = model.predict(input_df)[0]
-    st.success(f"📈 Predicted Gold Price: ${prediction:.2f}")
+# Load and show data
+data = load_data(uploaded_file)
+st.subheader("Historical Gold Prices")
+st.line_chart(data.set_index('ds')['y'])
+
+# Forecast
+forecast, model = forecast_prices(data)
+st.subheader("Forecasted Gold Prices for Next 30 Days")
+forecast_tail = forecast[['ds', 'yhat']].tail(30)
+st.dataframe(forecast_tail.set_index('ds'))
+
+# Plot forecast
+st.subheader("Forecast Plot")
+fig1 = model.plot(forecast)
+st.pyplot(fig1)
+
+# Plot forecast components
+st.subheader("Forecast Components")
+fig2 = model.plot_components(forecast)
+st.pyplot(fig2)
